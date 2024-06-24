@@ -1,0 +1,23 @@
+[package]
+name = "bspparser"
+description = "Extract information from .bsp files"
+categories = ["parsing"]
+keywords = ["bsp", "parser", "quake", "quakeworld"]
+repository = "https://github.com/vikpe/bspparser"
+authors = ["Viktor Persson <viktor.persson@arcsin.se>"]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+include = [
+    "/Cargo.toml",
+    "/README.md",
+    "/src/**",
+]
+
+[dependencies]
+aho-corasick = "1.1.3"
+anyhow = "1.0.86"
+bstr = "1.9.1"
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"

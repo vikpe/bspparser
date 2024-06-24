@@ -1,2 +1,3 @@
 # bspparser
-Parse stuff from .bsp files.
+
+> Extract information from .bsp files
