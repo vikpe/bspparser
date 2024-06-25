@@ -20,3 +20,8 @@ bstr = "1.9.1"
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
+criterion = { version = "0.5.1", default-features = false }
+
+[[bench]]
+name = "bench_lib"
+harness = false
