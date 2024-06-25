@@ -15,6 +15,10 @@ fn lib_benchmark(c: &mut Criterion) {
         b.iter(|| bspparser::entities::get_entities(&data))
     });
 
+    group.bench_function("worldspawn::get_worldspawn_message", |b| {
+        b.iter(|| bspparser::worldspawn::get_worldspawn_message(&data))
+    });
+
     group.finish();
 }
 
