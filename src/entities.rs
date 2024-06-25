@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_get_entities_maps() -> Result<()> {
         {
-            let demo_data = fs::read("test_files/dm3_gpl.bsp")?;
+            let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
             let entities = get_entities_maps(&demo_data)?;
             assert_eq!(entities.len(), 211);
             assert_eq!(
@@ -123,15 +123,15 @@ mod tests {
     #[test]
     fn test_entities_text() -> Result<()> {
         {
-            let demo_data = fs::read("test_files/dm3_gpl.bsp")?;
+            let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
             let result = get_entities_string(&demo_data)?;
-            let expected = fs::read_to_string("test_files/dm3_gpl.entities")?;
+            let expected = fs::read_to_string("tests/files/dm3_gpl.entities")?;
             assert_eq!(result, expected);
         }
         {
-            let demo_data = fs::read("test_files/povdmm4.bsp")?;
+            let demo_data = fs::read("tests/files/povdmm4.bsp")?;
             let result = get_entities_string(&demo_data)?;
-            let expected = fs::read_to_string("test_files/povdmm4.entities")?;
+            let expected = fs::read_to_string("tests/files/povdmm4.entities")?;
             assert_eq!(result, expected);
         }
         Ok(())
