@@ -121,7 +121,9 @@ pub enum Entity {
         wad: String,
         worldtype: String,
     },
-    Unknown,
+    Unknown {
+        classname: Option<String>,
+    },
 }
 
 fn get_value(map: &HashMap<String, String>, key: &str) -> String {
@@ -170,7 +172,7 @@ impl From<&HashMap<String, String>> for Entity {
                 },
                 "item_armor1" => Entity::ItemArmor1 { origin },
                 "item_armor2" => Entity::ItemArmor2 { origin },
-                "item_armor_inv" => Entity::ItemArmorInv { origin },
+                "item_armorInv" => Entity::ItemArmorInv { origin },
                 "item_artifact_invisibility" => Entity::ItemArtifactInvisibility { origin },
                 "item_artifact_invulnerability" => Entity::ItemArtifactInvulnerability { origin },
                 "item_artifact_super_damage" => Entity::ItemArtifactSuperDamage { origin },
@@ -205,9 +207,11 @@ impl From<&HashMap<String, String>> for Entity {
                     wad: get_value(hmap, "wad"),
                     worldtype: get_value(hmap, "worldtype"),
                 },
-                _ => Entity::Unknown,
+                _ => Entity::Unknown {
+                    classname: Some(classname.to_string()),
+                },
             },
-            _ => Entity::Unknown,
+            _ => Entity::Unknown { classname: None },
         }
     }
 }

@@ -67,9 +67,19 @@ mod tests {
 
     #[test]
     fn test_get_entities() -> Result<()> {
-        let demo_data = fs::read("test_files/dm3_gpl.bsp")?;
+        let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
         let entities = get_entities(&demo_data)?;
+
         assert_eq!(entities.len(), 211);
+
+        let unknowns = entities
+            .iter()
+            .filter(|e| match e {
+                Entity::Unknown { .. } => true,
+                _ => false,
+            })
+            .count();
+        assert_eq!(unknowns, 0);
 
         assert_eq!(
             entities[0],
