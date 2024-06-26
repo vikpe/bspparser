@@ -1,4 +1,4 @@
-# bspparser [![Test](https://github.com/vikpe/bspparser/actions/workflows/test.yml/badge.svg)](https://github.com/vikpe/bspparser/actions/workflows/test.yml)
+# bspparser [![Test](https://github.com/vikpe/bspparser/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/vikpe/bspparser/actions/workflows/test.yml) [![crates](https://img.shields.io/crates/v/bspparser)](https://crates.io/crates/bspparser) [![docs.rs](https://img.shields.io/docsrs/bspparser)](https://docs.rs/bspparser/)
 
 > Extract information from .bsp files
 
