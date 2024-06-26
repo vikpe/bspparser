@@ -3,18 +3,8 @@ use std::collections::HashMap;
 use anyhow::{anyhow as e, Result};
 use bstr::ByteSlice;
 
-use crate::entity::Entity;
-
-pub fn get_entities(data: &[u8]) -> Result<Vec<Entity>> {
-    let entities = get_entities_maps(data)?
-        .iter()
-        .map(|em| em.into())
-        .collect();
-    Ok(entities)
-}
-
-fn get_entities_maps(data: &[u8]) -> Result<Vec<HashMap<String, String>>> {
-    let ent_string = get_entities_string(data)?;
+pub fn entities_as_hashmaps(data: &[u8]) -> Result<Vec<HashMap<String, String>>> {
+    let ent_string = entities_as_string(data)?;
 
     let mut entities = Vec::new();
     let mut current_entity = HashMap::new();
@@ -39,7 +29,7 @@ fn get_entities_maps(data: &[u8]) -> Result<Vec<HashMap<String, String>>> {
     Ok(entities)
 }
 
-fn get_entities_string(data: &[u8]) -> Result<String> {
+pub fn entities_as_string(data: &[u8]) -> Result<String> {
     let Some(index_worldspawn) = data.find(br#""worldspawn""#) else {
         return Err(e!("Entities not found (missing worldspawn)"));
     };
@@ -84,65 +74,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_entities() -> Result<()> {
+    fn test_entities_as_hashmaps() -> Result<()> {
         {
             let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
-            let entities = get_entities(&demo_data)?;
-
-            assert_eq!(entities.len(), 211);
-
-            let unknowns = entities
-                .iter()
-                .filter(|e| match e {
-                    Entity::Unknown { .. } => true,
-                    _ => false,
-                })
-                .count();
-            assert_eq!(unknowns, 0);
-
-            assert_eq!(
-                entities[0],
-                Entity::WorldSpawn {
-                    message: "The Abandoned Base".to_string(),
-                    sounds: "6".to_string(),
-                    wad: "gfx/base.wad".to_string(),
-                    worldtype: "2".to_string(),
-                }
-            );
-
-            assert_eq!(
-                entities[210],
-                Entity::InfoIntermission {
-                    mangle: "20 240 0".to_string(),
-                    origin: "1840 256 64".to_string(),
-                }
-            );
-        }
-
-        {
-            let demo_data = fs::read("tests/files/povdmm4.bsp")?;
-            let entities = get_entities(&demo_data)?;
-
-            assert_eq!(entities.len(), 26);
-
-            let unknowns = entities
-                .iter()
-                .filter(|e| match e {
-                    Entity::Unknown { .. } => true,
-                    _ => false,
-                })
-                .count();
-            assert_eq!(unknowns, 0);
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_get_entities_maps() -> Result<()> {
-        {
-            let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
-            let entities = get_entities_maps(&demo_data)?;
+            let entities = entities_as_hashmaps(&demo_data)?;
             assert_eq!(entities.len(), 211);
             assert_eq!(
                 entities.get(0),
@@ -167,16 +102,16 @@ mod tests {
     }
 
     #[test]
-    fn test_entities_text() -> Result<()> {
+    fn test_entities_as_string() -> Result<()> {
         {
             let demo_data = fs::read("tests/files/dm3_gpl.bsp")?;
-            let result = get_entities_string(&demo_data)?;
+            let result = entities_as_string(&demo_data)?;
             let expected = fs::read_to_string("tests/files/dm3_gpl.entities")?;
             assert_eq!(result, expected);
         }
         {
             let demo_data = fs::read("tests/files/povdmm4.bsp")?;
-            let result = get_entities_string(&demo_data)?;
+            let result = entities_as_string(&demo_data)?;
             let expected = fs::read_to_string("tests/files/povdmm4.entities")?;
             assert_eq!(result, expected);
         }
