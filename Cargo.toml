@@ -23,8 +23,9 @@ cgmath = "0.18.0"
 [dev-dependencies]
 pretty_assertions = "1.4.0"
 
-criterion = { version = "0.5.1", default-features = false }
+# uncomment to enable benchmarks
+#criterion = { version = "0.5.1", default-features = false }
 
-[[bench]]
-name = "bench_lib"
-harness = false
+#[[bench]]
+#name = "bench_lib"
+#harness = false
