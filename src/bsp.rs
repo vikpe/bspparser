@@ -15,6 +15,7 @@ const SIZE_PLANE: usize = 4 * 3 + 4 + 4;
 const SIZE_FACE: usize = 2 + 2 + 4 + 2 + 2 + 4 + 4;
 const SIZE_MODEL: usize = (4 * 3) * 3 + 4 * 4 + 4 + 4 + 4;
 
+#[derive(Debug, Default, PartialEq)]
 pub struct BspFile {
     pub entities: Vec<HashMap<String, String>>,
     pub light_maps: Vec<u8>,
@@ -130,6 +131,7 @@ impl BspFile {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Model {
     pub bound: (Vector3<f32>, Vector3<f32>),
     pub origin: Vector3<f32>,
@@ -168,6 +170,7 @@ impl Model {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Face {
     pub plane: usize,
     pub front: bool,
@@ -206,6 +209,7 @@ impl Face {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Plane {
     pub normal: Vector3<f32>,
     pub distance: f32,
@@ -250,6 +254,7 @@ impl Edge {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct TextureInfo {
     pub vector_s: Vector3<f32>,
     pub dist_s: f32,
@@ -288,7 +293,7 @@ impl TextureInfo {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Texture {
     pub id: i32,
     pub name: String,
@@ -363,13 +368,14 @@ impl Texture {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Picture {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
 struct Entry {
     offset: i32,
     size: i32,
