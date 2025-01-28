@@ -2,13 +2,15 @@
 
 > Extract information from .bsp files
 
-## Entities
+## Usage
 
 ```rust
-let data = fs::read("dm3.mvd")?;
+let file = &mut fs::File::open("tests/files/povdmm4.bsp")?;
+let bsp = BspFile::parse(file)?;
+println!("{:?}", bsp.entities);
+```
 
-pub fn entities_as_hashmaps(data: &[u8]) -> Result<Vec<HashMap<String, String>>> { }
-/*
+```json
 [
     {
         "wad": "gfx/base.wad", 
@@ -21,23 +23,6 @@ pub fn entities_as_hashmaps(data: &[u8]) -> Result<Vec<HashMap<String, String>>>
         "classname": "light_fluoro",
         "origin": "264 -32 88"
     }
-    ...
+    // ...
 ]
-*/
-
-pub fn entities_as_string(data: &[u8]) -> Result<String> { }
-/*
-{
-"wad" "gfx/base.wad"
-"classname" "worldspawn"
-"worldtype" "2"
-"sounds" "6"
-"message" "The Abandoned Base"
-}
-{
-"classname" "light_fluoro"
-"origin" "264 -32 88"
-}
-...
-*/
 ```
