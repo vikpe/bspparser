@@ -5,7 +5,7 @@ categories = ["parsing"]
 keywords = ["bsp", "maps", "parser", "quake", "quakeworld"]
 repository = "https://github.com/vikpe/bspparser"
 authors = ["Viktor Persson"]
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 include = [
@@ -23,7 +23,7 @@ cgmath = "0.18.0"
 [dev-dependencies]
 pretty_assertions = "1.4.0"
 
-# uncomment to enable benchmarks
+# uncomment and run "cargo update" to enable benchmarks
 #criterion = { version = "0.5.1", default-features = false }
 
 #[[bench]]
