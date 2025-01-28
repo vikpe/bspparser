@@ -1,6 +1,6 @@
 [package]
 name = "bspparser"
-description = "Extract information from .bsp files"
+description = "Parse Quake .bsp files"
 categories = ["parsing"]
 keywords = ["bsp", "maps", "parser", "quake", "quakeworld"]
 repository = "https://github.com/vikpe/bspparser"
