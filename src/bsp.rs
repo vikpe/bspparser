@@ -70,12 +70,7 @@ impl BspFile {
         let h = BspHeader::read(r)?;
 
         // 1. Entities
-        let entities = {
-            let mut entities_buf = vec![0; h.entities.size as usize];
-            r.seek(SeekFrom::Start(h.entities.offset as u64))?;
-            r.read_exact(&mut entities_buf)?;
-            parse_entities(&entities_buf)
-        }?;
+        let entities = parse_entities(&read_vec::<u8>(r, &h.entities)?)?;
 
         // 2. Planes
         let planes = read_vec::<Plane>(r, &h.planes)?;
@@ -106,9 +101,7 @@ impl BspFile {
         let faces = read_vec::<Face>(r, &h.faces)?;
 
         // 9. Light Maps
-        let mut lightmaps = vec![0; h.lightmaps.size as usize];
-        r.seek(SeekFrom::Start(h.lightmaps.offset as u64))?;
-        r.read_exact(&mut lightmaps)?;
+        let lightmaps = read_vec::<u8>(r, &h.lightmaps)?;
 
         // 10. Clip Nodes
         // 11. Leaves
