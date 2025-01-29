@@ -2,18 +2,43 @@
 // original: https://github.com/Thinkofname/rust-quake/blob/master/src/bsp/mod.rs
 use crate::parse::*;
 use anyhow::{anyhow as e, Error, Result};
-use binrw::BinRead;
+use binrw::{BinRead, BinResult};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom};
 use std::ops::Range;
 
-const SIZE_TEXTURE_INFO: usize = 4 * 6 + 4 * 2 + 4 * 2;
-// const SIZE_VERTEX: usize = 4 * 3;
-const SIZE_EDGE: usize = 2 + 2;
-const SIZE_PLANE: usize = 4 * 3 + 4 + 4;
-const SIZE_FACE: usize = 2 + 2 + 4 + 2 + 2 + 4 + 4;
-const SIZE_MODEL: usize = (4 * 3) * 3 + 4 * 4 + 4 + 4 + 4;
+pub trait FromReader {
+    type OutputType;
+    fn num_elements(size: u32) -> u32;
+    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType>;
+}
+
+impl<T: BinRead + for<'a> BinRead<Args<'a> = ()>> FromReader for T {
+    type OutputType = T;
+
+    fn num_elements(size: u32) -> u32 {
+        size / (size_of::<T>() as u32)
+    }
+
+    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType> {
+        T::read_le(reader)
+    }
+}
+
+pub fn read_vec<T: FromReader>(
+    reader: &mut (impl Read + Seek),
+    entry: &Entry,
+) -> BinResult<Vec<T::OutputType>> {
+    reader.seek(SeekFrom::Start(entry.offset as u64))?;
+    let count = T::num_elements(entry.size);
+    let mut elements = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let element = T::from_reader(reader)?;
+        elements.push(element);
+    }
+    Ok(elements)
+}
 
 #[derive(Debug)]
 pub struct BspFile {
@@ -45,7 +70,6 @@ impl BspFile {
         let h = BspHeader::read(r)?;
 
         // 1. Entities
-        // println!("1. Entities");
         let entities = {
             let mut entities_buf = vec![0; h.entities.size as usize];
             r.seek(SeekFrom::Start(h.entities.offset as u64))?;
@@ -54,19 +78,9 @@ impl BspFile {
         }?;
 
         // 2. Planes
-        // println!("2. Planes");
-
-        let planes = {
-            let mut planes = Vec::with_capacity(h.planes.size as usize / SIZE_PLANE);
-            r.seek(SeekFrom::Start(h.planes.offset as u64))?;
-            for _ in 0..planes.capacity() {
-                planes.push(Plane::read(r)?);
-            }
-            planes
-        };
+        let planes = read_vec::<Plane>(r, &h.planes)?;
 
         // 3. Wall Textures
-        // println!("3. Wall Textures");
         r.seek(SeekFrom::Start(h.textures.offset as u64))?;
         let textures = Texture::parse(r)?;
 
@@ -86,25 +100,9 @@ impl BspFile {
         // (skipped)
 
         // 7. Texture Info
-        let texture_info = {
-            let mut infos = Vec::with_capacity(h.texture_info.size as usize / SIZE_TEXTURE_INFO);
-            r.seek(SeekFrom::Start(h.texture_info.offset as u64))?;
-            for _ in 0..infos.capacity() {
-                infos.push(TextureInfo::read(r)?);
-            }
-            infos
-        };
+        let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
 
-        // 8. Faces
-        let faces = {
-            let count = h.faces.size as usize / SIZE_FACE;
-            let mut faces = Vec::with_capacity(count);
-            r.seek(SeekFrom::Start(h.faces.offset as u64))?;
-            for _ in 0..count {
-                faces.push(Face::read(r)?);
-            }
-            faces
-        };
+        let faces = read_vec::<Face>(r, &h.faces)?;
 
         // 9. Light Maps
         let mut lightmaps = vec![0; h.lightmaps.size as usize];
@@ -117,15 +115,7 @@ impl BspFile {
         // (skipped)
 
         // 13. Edges
-        let edges = {
-            let count = h.edges.size as usize / SIZE_EDGE;
-            let mut edges = Vec::with_capacity(count);
-            r.seek(SeekFrom::Start(h.edges.offset as u64))?;
-            for _ in 0..count {
-                edges.push(Edge::read(r)?);
-            }
-            edges
-        };
+        let edges = read_vec::<Edge>(r, &h.edges)?;
 
         // 14. Edge List
         let edge_list = {
@@ -139,15 +129,7 @@ impl BspFile {
         };
 
         // 15. Models
-        let models = {
-            let count = h.models.size as usize / SIZE_MODEL;
-            let mut models = Vec::with_capacity(count);
-            r.seek(SeekFrom::Start(h.models.offset as u64))?;
-            for _ in 0..count {
-                models.push(Model::read(r)?);
-            }
-            models
-        };
+        let models = read_vec::<Model>(r, &h.models)?;
 
         // Done!
         Ok(BspFile {
@@ -301,7 +283,11 @@ pub struct Plane {
 
 #[derive(Debug, BinRead, PartialEq)]
 #[br(little)]
-pub struct Edge(pub QVec3, pub QVec3);
+pub struct Edge(pub [u16; 3], pub [u16; 3]);
+
+#[derive(Debug, BinRead, PartialEq)]
+#[br(little)]
+pub struct EdgeV2(pub [u32; 3], pub [u32; 3]);
 
 #[derive(Debug, BinRead)]
 #[br(little)]
@@ -404,8 +390,8 @@ pub struct Picture {
 #[derive(BinRead, Debug, Default)]
 #[br(little)]
 pub struct Entry {
-    offset: i32,
-    size: i32,
+    offset: u32,
+    size: u32,
 }
 
 #[cfg(test)]
@@ -444,7 +430,7 @@ mod tests {
             );
 
             assert_eq!(bsp.edge_list.len(), 1518);
-            assert_eq!(bsp.edges.len(), 760);
+            assert_eq!(bsp.edges.len(), 253);
             assert_eq!(bsp.faces.len(), 323);
             assert_eq!(bsp.lightmaps.len(), 15850);
             assert_eq!(bsp.models.len(), 5);
@@ -477,7 +463,7 @@ mod tests {
             );
 
             assert_eq!(bsp.edge_list.len(), 16002);
-            assert_eq!(bsp.edges.len(), 8030);
+            assert_eq!(bsp.edges.len(), 2676);
             assert_eq!(bsp.faces.len(), 3236);
             assert_eq!(bsp.lightmaps.len(), 134639);
             assert_eq!(bsp.models.len(), 7);
