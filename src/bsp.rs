@@ -10,14 +10,14 @@ use std::ops::Range;
 
 pub trait FromReader {
     type OutputType;
-    fn num_elements(size: u32) -> u32;
+    fn element_count(size: u32) -> u32;
     fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType>;
 }
 
 impl<T: BinRead + for<'a> BinRead<Args<'a> = ()>> FromReader for T {
     type OutputType = T;
 
-    fn num_elements(size: u32) -> u32 {
+    fn element_count(size: u32) -> u32 {
         size / (size_of::<T>() as u32)
     }
 
@@ -31,7 +31,7 @@ pub fn read_vec<T: FromReader>(
     entry: &Entry,
 ) -> BinResult<Vec<T::OutputType>> {
     reader.seek(SeekFrom::Start(entry.offset as u64))?;
-    let count = T::num_elements(entry.size);
+    let count = T::element_count(entry.size);
     let mut elements = Vec::with_capacity(count as usize);
     for _ in 0..count {
         let element = T::from_reader(reader)?;
@@ -60,62 +60,36 @@ impl BspFile {
     where
         R: Read + Seek,
     {
-        // 0. BSP version
         let version = {
-            let mut version_bytes = [0; 4];
-            r.read_exact(&mut version_bytes)?;
-            Version::try_from(version_bytes)?
+            let mut bytes = [0; 4];
+            r.read_exact(&mut bytes)?;
+            Version::try_from(bytes)?
         };
 
         let h = BspHeader::read(r)?;
-
-        // 1. Entities
         let entities = parse_entities(&read_vec::<u8>(r, &h.entities)?)?;
-
-        // 2. Planes
         let planes = read_vec::<Plane>(r, &h.planes)?;
+        let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
+        let lightmaps = read_vec::<u8>(r, &h.lightmaps)?;
+        let edge_list = read_vec::<i32>(r, &h.edge_list)?;
+        let models = read_vec::<Model>(r, &h.models)?;
 
-        // 3. Wall Textures
         r.seek(SeekFrom::Start(h.textures.offset as u64))?;
         let textures = Texture::parse(r)?;
 
-        // 4. Map Vertices
-        // println!("4. Map Vertices");
-        /*let vertices = {
-            let mut vertices = Vec::with_capacity(h.vertices.size as usize / SIZE_VERTEX);
-            r.seek(SeekFrom::Start(h.vertices.offset as u64))?;
-            for _ in 0..vertices.capacity() {
-                vertices.push(Vector3::from(r.read_vector3_float()?));
+        // version specific (precision)
+        let (faces, edges) = match version {
+            Version::V29 => {
+                let faces = read_vec::<FaceV1Reader>(r, &h.faces)?;
+                let edges = read_vec::<EdgeV1Reader>(r, &h.edges)?;
+                (faces, edges)
             }
-            vertices
-        };*/
-
-        // 5. Leaves Visibility lists.
-        // 6. Nodes
-        // (skipped)
-
-        // 7. Texture Info
-        let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
-
-        // 8. Faces
-        let faces = read_vec::<Face>(r, &h.faces)?;
-
-        // 9. Light Maps
-        let lightmaps = read_vec::<u8>(r, &h.lightmaps)?;
-
-        // 10. Clip Nodes
-        // 11. Leaves
-        // 12. Face List
-        // (skipped)
-
-        // 13. Edges
-        let edges = read_vec::<Edge>(r, &h.edges)?;
-
-        // 14. Edge List
-        let edge_list = read_vec::<i32>(r, &h.edge_list)?;
-
-        // 15. Models
-        let models = read_vec::<Model>(r, &h.models)?;
+            Version::BSP2 => {
+                let faces = read_vec::<Face>(r, &h.faces)?;
+                let edges = read_vec::<Edge>(r, &h.edges)?;
+                (faces, edges)
+            }
+        };
 
         // Done!
         Ok(BspFile {
@@ -133,17 +107,6 @@ impl BspFile {
         })
     }
 }
-
-/*
-#[derive(Debug, BinRead)]
-#[br(little)]
-pub enum BspVersion {
-    #[br(magic(29u32))]
-    Bsp29,
-    #[br(magic(844124994u32))]
-    Bsp2,
-}
-*/
 
 #[derive(Debug, BinRead)]
 #[br(little)]
@@ -246,6 +209,20 @@ impl Model {
 #[derive(Debug, BinRead)]
 #[br(little)]
 pub struct Face {
+    pub plane_index: u32,
+    pub side: u32,
+    pub edge_index_from: u32,
+    pub edge_index_count: u32,
+    pub texture_info_index: u32,
+    pub type_light: u8,
+    pub base_light: u8,
+    pub light: [u8; 2],
+    pub lightmap: u32,
+}
+
+#[derive(Debug, BinRead)]
+#[br(little)]
+pub struct FaceV1 {
     pub plane_index: u16,
     pub side: u16,
     pub edge_index_from: u32,
@@ -255,6 +232,31 @@ pub struct Face {
     pub base_light: u8,
     pub light: [u8; 2],
     pub lightmap: u32,
+}
+
+struct FaceV1Reader;
+
+impl FromReader for FaceV1Reader {
+    type OutputType = Face;
+
+    fn element_count(size: u32) -> u32 {
+        size / (size_of::<FaceV1>() as u32)
+    }
+
+    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType> {
+        let v = FaceV1::read_le(reader)?;
+        Ok(Face {
+            plane_index: v.plane_index as u32,
+            side: v.side as u32,
+            edge_index_from: v.edge_index_from,
+            edge_index_count: v.edge_index_count as u32,
+            texture_info_index: v.texture_info_index as u32,
+            type_light: v.type_light,
+            base_light: v.base_light,
+            light: v.light,
+            lightmap: v.lightmap,
+        })
+    }
 }
 
 type QVec3 = [f32; 3];
@@ -267,13 +269,37 @@ pub struct Plane {
     pub kind: i32,
 }
 
-#[derive(Debug, BinRead, PartialEq)]
+#[derive(Debug, BinRead)]
 #[br(little)]
-pub struct Edge(pub [u16; 3], pub [u16; 3]);
+pub struct Edge {
+    pub v0: u32,
+    pub v1: u32,
+}
 
-#[derive(Debug, BinRead, PartialEq)]
+#[derive(Debug, BinRead)]
 #[br(little)]
-pub struct EdgeV2(pub [u32; 3], pub [u32; 3]);
+pub struct EdgeV1 {
+    pub v0: u16,
+    pub v1: u16,
+}
+
+pub struct EdgeV1Reader;
+
+impl FromReader for EdgeV1Reader {
+    type OutputType = Edge;
+
+    fn element_count(size: u32) -> u32 {
+        size / (size_of::<EdgeV1>() as u32)
+    }
+
+    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType> {
+        let v = EdgeV1::read_le(reader)?;
+        Ok(Edge {
+            v0: v.v0 as u32,
+            v1: v.v1 as u32,
+        })
+    }
+}
 
 #[derive(Debug, BinRead)]
 #[br(little)]
@@ -388,6 +414,22 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn test_parse_bsp2() -> Result<()> {
+        let file = &mut fs::File::open("tests/files/dust2qw.bsp")?;
+        let bsp = BspFile::parse(file)?;
+        assert_eq!(bsp.entities.len(), 66);
+        assert_eq!(bsp.edge_list.len(), 33556);
+        assert_eq!(bsp.edges.len(), 16879);
+        assert_eq!(bsp.faces.len(), 7116);
+        assert_eq!(bsp.lightmaps.len(), 177828);
+        assert_eq!(bsp.models.len(), 5);
+        assert_eq!(bsp.planes.len(), 3779);
+        assert_eq!(bsp.texture_info.len(), 2133);
+        assert_eq!(bsp.textures.len(), 47);
+        Ok(())
+    }
+
+    #[test]
     fn test_parse_v29() -> Result<()> {
         {
             let file = &mut fs::File::open("tests/files/povdmm4.bsp")?;
@@ -416,7 +458,7 @@ mod tests {
             );
 
             assert_eq!(bsp.edge_list.len(), 1518);
-            assert_eq!(bsp.edges.len(), 253);
+            assert_eq!(bsp.edges.len(), 760);
             assert_eq!(bsp.faces.len(), 323);
             assert_eq!(bsp.lightmaps.len(), 15850);
             assert_eq!(bsp.models.len(), 5);
@@ -449,7 +491,7 @@ mod tests {
             );
 
             assert_eq!(bsp.edge_list.len(), 16002);
-            assert_eq!(bsp.edges.len(), 2676);
+            assert_eq!(bsp.edges.len(), 8030);
             assert_eq!(bsp.faces.len(), 3236);
             assert_eq!(bsp.lightmaps.len(), 134639);
             assert_eq!(bsp.models.len(), 7);
