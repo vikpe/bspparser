@@ -25,8 +25,8 @@ quake_text = "0.2.0"
 pretty_assertions = "1.4.0"
 
 # uncomment and run "cargo update" to enable benchmarks
-#criterion = { version = "0.5.1", default-features = false }
+criterion = { version = "0.5.1", default-features = false }
 
-#[[bench]]
-#name = "bench_lib"
-#harness = false
+[[bench]]
+name = "bench_lib"
+harness = false
