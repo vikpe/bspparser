@@ -3,14 +3,13 @@
 use crate::parse::*;
 use anyhow::{anyhow as e, Error, Result};
 use binrw::BinRead;
-use cgmath::Vector3;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom};
 use std::ops::Range;
 
 const SIZE_TEXTURE_INFO: usize = 4 * 6 + 4 * 2 + 4 * 2;
-const SIZE_VERTEX: usize = 4 * 3;
+// const SIZE_VERTEX: usize = 4 * 3;
 const SIZE_EDGE: usize = 2 + 2;
 const SIZE_PLANE: usize = 4 * 3 + 4 + 4;
 const SIZE_FACE: usize = 2 + 2 + 4 + 2 + 2 + 4 + 4;
@@ -73,14 +72,14 @@ impl BspFile {
 
         // 4. Map Vertices
         // println!("4. Map Vertices");
-        let vertices = {
+        /*let vertices = {
             let mut vertices = Vec::with_capacity(h.vertices.size as usize / SIZE_VERTEX);
             r.seek(SeekFrom::Start(h.vertices.offset as u64))?;
             for _ in 0..vertices.capacity() {
                 vertices.push(Vector3::from(r.read_vector3_float()?));
             }
             vertices
-        };
+        };*/
 
         // 5. Leaves Visibility lists.
         // 6. Nodes
@@ -118,8 +117,15 @@ impl BspFile {
         // (skipped)
 
         // 13. Edges
-        r.seek(SeekFrom::Start(h.edges.offset as u64))?;
-        let edges = Edge::parse(h.edges.size as usize / SIZE_EDGE, vertices, r)?;
+        let edges = {
+            let count = h.edges.size as usize / SIZE_EDGE;
+            let mut edges = Vec::with_capacity(count);
+            r.seek(SeekFrom::Start(h.edges.offset as u64))?;
+            for _ in 0..count {
+                edges.push(Edge::read(r)?);
+            }
+            edges
+        };
 
         // 14. Edge List
         let edge_list = {
@@ -264,7 +270,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn faces_indexes(&self) -> Range<usize> {
+    pub fn face_indexes(&self) -> Range<usize> {
         (self.face_index_from as usize)..(self.face_index_from as usize + self.face_count as usize)
     }
 }
@@ -293,24 +299,9 @@ pub struct Plane {
     pub kind: i32,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Edge(pub Vector3<f32>, pub Vector3<f32>);
-
-impl Edge {
-    pub fn parse<R>(count: usize, vertices: Vec<Vector3<f32>>, r: &mut R) -> Result<Vec<Edge>>
-    where
-        R: Read + Seek,
-    {
-        let mut edges = Vec::with_capacity(count);
-        for _ in 0..count {
-            edges.push(Edge(
-                vertices[r.read_ushort()? as usize],
-                vertices[r.read_ushort()? as usize],
-            ));
-        }
-        Ok(edges)
-    }
-}
+#[derive(Debug, BinRead, PartialEq)]
+#[br(little)]
+pub struct Edge(pub QVec3, pub QVec3);
 
 #[derive(Debug, BinRead)]
 #[br(little)]
