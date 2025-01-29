@@ -2,6 +2,7 @@
 // original: https://github.com/Thinkofname/rust-quake/blob/master/src/bsp/mod.rs
 use crate::parse::*;
 use anyhow::{anyhow as e, Error, Result};
+use binrw::BinRead;
 use cgmath::Vector3;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -15,9 +16,10 @@ const SIZE_PLANE: usize = 4 * 3 + 4 + 4;
 const SIZE_FACE: usize = 2 + 2 + 4 + 2 + 2 + 4 + 4;
 const SIZE_MODEL: usize = (4 * 3) * 3 + 4 * 4 + 4 + 4 + 4;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct BspFile {
     pub version: Version,
+    pub header: BspHeader,
     pub edge_list: Vec<i32>,
     pub edges: Vec<Edge>,
     pub entities: Vec<HashMap<String, String>>,
@@ -34,71 +36,78 @@ impl BspFile {
     where
         R: Read + Seek,
     {
-        // 1. BSP version
+        // 0. BSP version
         let version = {
             let mut version_bytes = [0; 4];
             r.read_exact(&mut version_bytes)?;
             Version::try_from(version_bytes)?
         };
 
-        let e_entities = Entry::read(r)?;
-        let e_planes = Entry::read(r)?;
-        let e_wall_textures = Entry::read(r)?;
-        let e_vertices = Entry::read(r)?;
-        let _e_visibility_list = Entry::read(r)?;
-        let _e_nodes = Entry::read(r)?;
-        let e_texture_info = Entry::read(r)?;
-        let e_faces = Entry::read(r)?;
-        let e_light_maps = Entry::read(r)?;
-        let _e_clip_nodes = Entry::read(r)?;
-        let _e_leaves = Entry::read(r)?;
-        let _e_face_list = Entry::read(r)?;
-        let e_edges = Entry::read(r)?;
-        let e_edge_list = Entry::read(r)?;
-        let e_models = Entry::read(r)?;
+        let h = BspHeader::read(r)?;
 
-        // 2. Entities
-        println!("2. Entities");
+        // 1. Entities
+        // println!("1. Entities");
         let entities = {
-            let mut entities_buf = vec![0; e_entities.size as usize];
-            r.seek(SeekFrom::Start(e_entities.offset as u64))?;
+            let mut entities_buf = vec![0; h.entities.size as usize];
+            r.seek(SeekFrom::Start(h.entities.offset as u64))?;
             r.read_exact(&mut entities_buf)?;
             parse_entities(&entities_buf)
         }?;
 
-        // 3. Planes
-        println!("3. Planes");
-        r.seek(SeekFrom::Start(e_planes.offset as u64))?;
-        let planes = Plane::parse(e_planes.size as usize / SIZE_PLANE, r)?;
+        // 2. Planes
+        // println!("2. Planes");
 
-        // 4. Wall Textures
-        println!("4. Wall Textures");
-        r.seek(SeekFrom::Start(e_wall_textures.offset as u64))?;
+        let planes = {
+            let mut planes = Vec::with_capacity(h.planes.size as usize / SIZE_PLANE);
+            r.seek(SeekFrom::Start(h.planes.offset as u64))?;
+
+            for _ in 0..planes.capacity() {
+                planes.push(Plane::read(r)?);
+            }
+            planes
+        };
+
+        // 3. Wall Textures
+        // println!("3. Wall Textures");
+        r.seek(SeekFrom::Start(h.textures.offset as u64))?;
         let textures = Texture::parse(r)?;
 
-        // 5. Map Vertices
-        r.seek(SeekFrom::Start(e_vertices.offset as u64))?;
-        let vertice_count = e_vertices.size as usize / SIZE_VERTEX;
-        let mut vertices = Vec::with_capacity(vertice_count);
-        for _ in 0..vertice_count {
-            vertices.push(Vector3::from(r.read_vector3_float()?));
-        }
+        // 4. Map Vertices
+        // println!("4. Map Vertices");
+        let vertices = {
+            let mut vertices = Vec::with_capacity(h.vertices.size as usize / SIZE_VERTEX);
+            r.seek(SeekFrom::Start(h.vertices.offset as u64))?;
+
+            for _ in 0..vertices.capacity() {
+                vertices.push(Vector3::from(r.read_vector3_float()?));
+            }
+            vertices
+        };
 
         // 5. Leaves Visibility lists.
         // 6. Nodes
         // (skipped)
 
         // 7. Texture Info
-        r.seek(SeekFrom::Start(e_texture_info.offset as u64))?;
-        let texture_info = TextureInfo::parse(e_texture_info.size as usize / SIZE_TEXTURE_INFO, r)?;
+        let texture_info = {
+            let mut infos = Vec::with_capacity(h.texture_info.size as usize / SIZE_TEXTURE_INFO);
+
+            r.seek(SeekFrom::Start(h.texture_info.offset as u64))?;
+
+            for _ in 0..infos.capacity() {
+                infos.push(TextureInfo::read(r)?);
+            }
+
+            infos
+        };
 
         // 8. Faces
-        r.seek(SeekFrom::Start(e_faces.offset as u64))?;
-        let faces = Face::parse(e_faces.size as usize / SIZE_FACE, r)?;
+        r.seek(SeekFrom::Start(h.faces.offset as u64))?;
+        let faces = Face::parse(h.faces.size as usize / SIZE_FACE, r)?;
 
         // 9. Light Maps
-        let mut light_maps = vec![0; e_light_maps.size as usize];
-        r.seek(SeekFrom::Start(e_light_maps.offset as u64))?;
+        let mut light_maps = vec![0; h.lightmaps.size as usize];
+        r.seek(SeekFrom::Start(h.lightmaps.offset as u64))?;
         r.read_exact(&mut light_maps)?;
 
         // 10. Clip Nodes
@@ -107,24 +116,25 @@ impl BspFile {
         // (skipped)
 
         // 13. Edges
-        r.seek(SeekFrom::Start(e_edges.offset as u64))?;
-        let edges = Edge::parse(e_edges.size as usize / SIZE_EDGE, vertices, r)?;
+        r.seek(SeekFrom::Start(h.edges.offset as u64))?;
+        let edges = Edge::parse(h.edges.size as usize / SIZE_EDGE, vertices, r)?;
 
         // 14. Edge List
-        let edge_list_count = e_edge_list.size as usize / 4;
+        let edge_list_count = h.edge_list.size as usize / 4;
         let mut edge_list = Vec::with_capacity(edge_list_count);
-        r.seek(SeekFrom::Start(e_edge_list.offset as u64))?;
+        r.seek(SeekFrom::Start(h.edge_list.offset as u64))?;
         for _ in 0..edge_list_count {
             edge_list.push(r.read_long()?);
         }
 
         // 15. Models
-        r.seek(SeekFrom::Start(e_models.offset as u64))?;
-        let models = Model::parse(e_models.size as usize / SIZE_MODEL, r)?;
+        r.seek(SeekFrom::Start(h.models.offset as u64))?;
+        let models = Model::parse(h.models.size as usize / SIZE_MODEL, r)?;
 
         // Done!
         Ok(BspFile {
             version,
+            header: h,
             entities,
             light_maps,
             textures,
@@ -136,6 +146,38 @@ impl BspFile {
             models,
         })
     }
+}
+
+/*
+#[derive(Debug, BinRead)]
+#[br(little)]
+pub enum BspVersion {
+    #[br(magic(29u32))]
+    Bsp29,
+    #[br(magic(844124994u32))]
+    Bsp2,
+}
+*/
+
+#[derive(Debug, BinRead)]
+#[br(little)]
+pub struct BspHeader {
+    // pub version: BspVersion,
+    pub entities: Entry,
+    pub planes: Entry,
+    pub textures: Entry,
+    pub vertices: Entry,
+    pub visibility: Entry,
+    pub nodes: Entry,
+    pub texture_info: Entry,
+    pub faces: Entry,
+    pub lightmaps: Entry,
+    pub clipnodes: Entry,
+    pub leaves: Entry,
+    pub face_list: Entry,
+    pub edges: Entry,
+    pub edge_list: Entry,
+    pub models: Entry,
 }
 
 fn parse_entities(bytes: &[u8]) -> Result<Vec<HashMap<String, String>>> {
@@ -227,7 +269,7 @@ impl Model {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Face {
     pub plane_index: usize,
     pub is_front: bool,
@@ -266,30 +308,14 @@ impl Face {
     }
 }
 
-#[derive(Debug, PartialEq)]
+type QVec3 = [f32; 3];
+
+#[derive(Debug, BinRead, PartialEq)]
+#[br(little)]
 pub struct Plane {
-    pub normal: Vector3<f32>,
+    pub normal: QVec3,
     pub distance: f32,
     pub kind: i32,
-}
-
-impl Plane {
-    pub fn parse<R>(count: usize, r: &mut R) -> Result<Vec<Plane>>
-    where
-        R: Read + Seek,
-    {
-        let mut planes = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            planes.push(Plane {
-                normal: Vector3::from(r.read_vector3_float()?),
-                distance: r.read_float()?,
-                kind: r.read_long()?,
-            });
-        }
-
-        Ok(planes)
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -311,39 +337,23 @@ impl Edge {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, BinRead)]
+#[br(little)]
+pub struct Coord {
+    pub vec: QVec3,
+    pub offset: f32,
+}
+
+#[derive(Debug, BinRead)]
+#[br(little)]
 pub struct TextureInfo {
-    pub vector_s: Vector3<f32>,
-    pub dist_s: f32,
-    pub vector_t: Vector3<f32>,
-    pub dist_t: f32,
-    pub texture_index: usize,
-    pub is_animated: bool,
+    pub u: Coord,
+    pub v: Coord,
+    pub texture_id: u32,
+    pub flags: u32,
 }
 
-impl TextureInfo {
-    pub fn parse<R>(count: usize, r: &mut R) -> Result<Vec<TextureInfo>>
-    where
-        R: Read + Seek,
-    {
-        let mut info = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            info.push(TextureInfo {
-                vector_s: Vector3::from(r.read_vector3_float()?),
-                dist_s: r.read_float()?,
-                vector_t: Vector3::from(r.read_vector3_float()?),
-                dist_t: r.read_float()?,
-                texture_index: r.read_ulong()? as usize,
-                is_animated: r.read_ulong()? != 0,
-            })
-        }
-
-        Ok(info)
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Texture {
     pub id: i32,
     pub name: String,
@@ -418,29 +428,18 @@ impl Texture {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Picture {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
-struct Entry {
+#[derive(BinRead, Debug, Default)]
+#[br(little)]
+pub struct Entry {
     offset: i32,
     size: i32,
-}
-
-impl Entry {
-    fn read<R>(r: &mut R) -> Result<Entry>
-    where
-        R: Read,
-    {
-        Ok(Entry {
-            offset: r.read_long()?,
-            size: r.read_long()?,
-        })
-    }
 }
 
 #[cfg(test)]
