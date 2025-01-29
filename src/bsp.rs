@@ -102,6 +102,7 @@ impl BspFile {
         // 7. Texture Info
         let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
 
+        // 8. Faces
         let faces = read_vec::<Face>(r, &h.faces)?;
 
         // 9. Light Maps
@@ -118,15 +119,7 @@ impl BspFile {
         let edges = read_vec::<Edge>(r, &h.edges)?;
 
         // 14. Edge List
-        let edge_list = {
-            let count = h.edge_list.size as usize / 4;
-            let mut list = Vec::with_capacity(count);
-            r.seek(SeekFrom::Start(h.edge_list.offset as u64))?;
-            for _ in 0..count {
-                list.push(r.read_long()?);
-            }
-            list
-        };
+        let edge_list = read_vec::<i32>(r, &h.edge_list)?;
 
         // 15. Models
         let models = read_vec::<Model>(r, &h.models)?;
