@@ -1,5 +1,5 @@
 // specification: https://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
-// original: https://github.com/Thinkofname/rust-quake/blob/master/src/bsp/mod.rs
+// inpiration from: https://github.com/Thinkofname/rust-quake/blob/master/src/bsp/mod.rs
 use crate::parse::*;
 use anyhow::{anyhow as e, Error, Result};
 use binrw::{BinRead, BinResult};
