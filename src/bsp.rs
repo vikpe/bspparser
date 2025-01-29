@@ -24,7 +24,7 @@ pub struct BspFile {
     pub edges: Vec<Edge>,
     pub entities: Vec<HashMap<String, String>>,
     pub faces: Vec<Face>,
-    pub light_maps: Vec<u8>,
+    pub lightmaps: Vec<u8>,
     pub models: Vec<Model>,
     pub planes: Vec<Plane>,
     pub texture_info: Vec<TextureInfo>,
@@ -60,7 +60,6 @@ impl BspFile {
         let planes = {
             let mut planes = Vec::with_capacity(h.planes.size as usize / SIZE_PLANE);
             r.seek(SeekFrom::Start(h.planes.offset as u64))?;
-
             for _ in 0..planes.capacity() {
                 planes.push(Plane::read(r)?);
             }
@@ -77,7 +76,6 @@ impl BspFile {
         let vertices = {
             let mut vertices = Vec::with_capacity(h.vertices.size as usize / SIZE_VERTEX);
             r.seek(SeekFrom::Start(h.vertices.offset as u64))?;
-
             for _ in 0..vertices.capacity() {
                 vertices.push(Vector3::from(r.read_vector3_float()?));
             }
@@ -91,13 +89,10 @@ impl BspFile {
         // 7. Texture Info
         let texture_info = {
             let mut infos = Vec::with_capacity(h.texture_info.size as usize / SIZE_TEXTURE_INFO);
-
             r.seek(SeekFrom::Start(h.texture_info.offset as u64))?;
-
             for _ in 0..infos.capacity() {
                 infos.push(TextureInfo::read(r)?);
             }
-
             infos
         };
 
@@ -106,9 +101,9 @@ impl BspFile {
         let faces = Face::parse(h.faces.size as usize / SIZE_FACE, r)?;
 
         // 9. Light Maps
-        let mut light_maps = vec![0; h.lightmaps.size as usize];
+        let mut lightmaps = vec![0; h.lightmaps.size as usize];
         r.seek(SeekFrom::Start(h.lightmaps.offset as u64))?;
-        r.read_exact(&mut light_maps)?;
+        r.read_exact(&mut lightmaps)?;
 
         // 10. Clip Nodes
         // 11. Leaves
@@ -120,23 +115,33 @@ impl BspFile {
         let edges = Edge::parse(h.edges.size as usize / SIZE_EDGE, vertices, r)?;
 
         // 14. Edge List
-        let edge_list_count = h.edge_list.size as usize / 4;
-        let mut edge_list = Vec::with_capacity(edge_list_count);
-        r.seek(SeekFrom::Start(h.edge_list.offset as u64))?;
-        for _ in 0..edge_list_count {
-            edge_list.push(r.read_long()?);
-        }
+        let edge_list = {
+            let count = h.edge_list.size as usize / 4;
+            let mut list = Vec::with_capacity(count);
+            r.seek(SeekFrom::Start(h.edge_list.offset as u64))?;
+            for _ in 0..count {
+                list.push(r.read_long()?);
+            }
+            list
+        };
 
         // 15. Models
-        r.seek(SeekFrom::Start(h.models.offset as u64))?;
-        let models = Model::parse(h.models.size as usize / SIZE_MODEL, r)?;
+        let models = {
+            let count = h.models.size as usize / SIZE_MODEL;
+            let mut models = Vec::with_capacity(count);
+            r.seek(SeekFrom::Start(h.models.offset as u64))?;
+            for _ in 0..count {
+                models.push(Model::read(r)?);
+            }
+            models
+        };
 
         // Done!
         Ok(BspFile {
             version,
             header: h,
             entities,
-            light_maps,
+            lightmaps,
             textures,
             texture_info,
             edges,
@@ -230,42 +235,30 @@ impl TryFrom<[u8; 4]> for Version {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, BinRead)]
+#[br(little)]
+pub struct BoundingBox {
+    pub min: QVec3,
+    pub max: QVec3,
+}
+
+#[derive(Debug, BinRead)]
+#[br(little)]
 pub struct Model {
-    pub bound: (Vector3<f32>, Vector3<f32>),
-    pub origin: Vector3<f32>,
-    pub face_indexes: Range<usize>,
+    pub bounds: BoundingBox,
+    pub origin: QVec3,
+    pub bsp: i32,
+    pub clip1: i32,
+    pub clip2: i32,
+    pub node3: i32,
+    pub leaf_count: i32,
+    pub face_index_from: i32,
+    pub face_count: i32,
 }
 
 impl Model {
-    pub fn parse<R>(count: usize, r: &mut R) -> Result<Vec<Model>>
-    where
-        R: Read + Seek,
-    {
-        let mut models = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            let bound_min = Vector3::from(r.read_vector3_float()?);
-            let bound_max = Vector3::from(r.read_vector3_float()?);
-            let origin = Vector3::from(r.read_vector3_float()?);
-            let _node_index = [
-                r.read_long()?,
-                r.read_long()?,
-                r.read_long()?,
-                r.read_long()?,
-            ];
-            let _leafs = r.read_long()?;
-            let face_start = r.read_long()?;
-            let face_number = r.read_long()?;
-
-            models.push(Model {
-                bound: (bound_min, bound_max),
-                origin,
-                face_indexes: face_start as usize..(face_start as usize + face_number as usize),
-            });
-        }
-
-        Ok(models)
+    pub fn faces_indexes(&self) -> Range<usize> {
+        (self.face_index_from as usize)..(self.face_index_from as usize + self.face_count as usize)
     }
 }
 
@@ -480,7 +473,7 @@ mod tests {
             assert_eq!(bsp.edge_list.len(), 1518);
             assert_eq!(bsp.edges.len(), 760);
             assert_eq!(bsp.faces.len(), 323);
-            assert_eq!(bsp.light_maps.len(), 15850);
+            assert_eq!(bsp.lightmaps.len(), 15850);
             assert_eq!(bsp.models.len(), 5);
             assert_eq!(bsp.planes.len(), 191);
             assert_eq!(bsp.texture_info.len(), 21);
@@ -513,7 +506,7 @@ mod tests {
             assert_eq!(bsp.edge_list.len(), 16002);
             assert_eq!(bsp.edges.len(), 8030);
             assert_eq!(bsp.faces.len(), 3236);
-            assert_eq!(bsp.light_maps.len(), 134639);
+            assert_eq!(bsp.lightmaps.len(), 134639);
             assert_eq!(bsp.models.len(), 7);
             assert_eq!(bsp.planes.len(), 835);
             assert_eq!(bsp.texture_info.len(), 272);
