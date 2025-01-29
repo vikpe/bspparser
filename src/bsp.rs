@@ -97,8 +97,15 @@ impl BspFile {
         };
 
         // 8. Faces
-        r.seek(SeekFrom::Start(h.faces.offset as u64))?;
-        let faces = Face::parse(h.faces.size as usize / SIZE_FACE, r)?;
+        let faces = {
+            let count = h.faces.size as usize / SIZE_FACE;
+            let mut faces = Vec::with_capacity(count);
+            r.seek(SeekFrom::Start(h.faces.offset as u64))?;
+            for _ in 0..count {
+                faces.push(Face::read(r)?);
+            }
+            faces
+        };
 
         // 9. Light Maps
         let mut lightmaps = vec![0; h.lightmaps.size as usize];
@@ -262,43 +269,18 @@ impl Model {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, BinRead)]
+#[br(little)]
 pub struct Face {
-    pub plane_index: usize,
-    pub is_front: bool,
-    pub edge_indexes: Range<usize>,
-    pub texture_info_index: usize,
+    pub plane_index: u16,
+    pub side: u16,
+    pub edge_index_from: u32,
+    pub edge_index_count: u16,
+    pub texture_info_index: u16,
     pub type_light: u8,
     pub base_light: u8,
     pub light: [u8; 2],
-    pub light_map: i32,
-}
-
-impl Face {
-    pub fn parse<R>(count: usize, r: &mut R) -> Result<Vec<Face>>
-    where
-        R: Read + Seek,
-    {
-        let mut faces = Vec::with_capacity(count);
-
-        for _ in 0..count {
-            faces.push(Face {
-                plane_index: r.read_ushort()? as usize,
-                is_front: r.read_ushort()? == 0,
-                edge_indexes: {
-                    let start = r.read_long()? as usize;
-                    start..(start + r.read_ushort()? as usize)
-                },
-                texture_info_index: r.read_ushort()? as usize,
-                type_light: r.read_uchar()?,
-                base_light: r.read_uchar()?,
-                light: [r.read_uchar()?, r.read_uchar()?],
-                light_map: r.read_long()?,
-            });
-        }
-
-        Ok(faces)
-    }
+    pub lightmap: u32,
 }
 
 type QVec3 = [f32; 3];
