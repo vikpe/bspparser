@@ -19,6 +19,7 @@ pub struct BspFile {
     pub models: Vec<Model>,
     pub planes: Vec<Plane>,
     pub texture_info: Vec<TextureInfo>,
+    pub vertices: Vec<Vertex>,
 }
 
 impl BspFile {
@@ -36,6 +37,7 @@ impl BspFile {
         let entities = parse_entities(&read_vec::<u8>(r, &h.entities)?)?;
         let planes = read_vec::<Plane>(r, &h.planes)?;
         let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
+        let vertices = read_vec::<Vertex>(r, &h.vertices)?;
         let lightmaps = read_vec::<u8>(r, &h.lightmaps)?;
         let edge_list = read_vec::<i32>(r, &h.edge_list)?;
         let models = read_vec::<Model>(r, &h.models)?;
@@ -57,14 +59,15 @@ impl BspFile {
         Ok(BspFile {
             version,
             header: h,
-            entities,
-            lightmaps,
-            texture_info,
-            edges,
             edge_list,
-            planes,
+            edges,
+            entities,
             faces,
+            lightmaps,
             models,
+            planes,
+            texture_info,
+            vertices,
         })
     }
 }
@@ -260,6 +263,9 @@ impl FromReader for EdgeV1Reader {
 }
 
 #[derive(Debug, BinRead)]
+pub struct Vertex(#[allow(dead_code)] [f32; 3]);
+
+#[derive(Debug, BinRead)]
 #[br(little)]
 pub struct Coord {
     pub vec: [f32; 3],
@@ -333,6 +339,7 @@ mod tests {
         assert_eq!(bsp.models.len(), 5);
         assert_eq!(bsp.planes.len(), 3779);
         assert_eq!(bsp.texture_info.len(), 2133);
+        assert_eq!(bsp.vertices.len(), 8825);
         Ok(())
     }
 
@@ -371,6 +378,7 @@ mod tests {
             assert_eq!(bsp.models.len(), 5);
             assert_eq!(bsp.planes.len(), 191);
             assert_eq!(bsp.texture_info.len(), 21);
+            assert_eq!(bsp.vertices.len(), 416);
         }
         {
             let file = &mut fs::File::open("tests/files/dm3_gpl.bsp")?;
@@ -403,6 +411,7 @@ mod tests {
             assert_eq!(bsp.models.len(), 7);
             assert_eq!(bsp.planes.len(), 835);
             assert_eq!(bsp.texture_info.len(), 272);
+            assert_eq!(bsp.vertices.len(), 4544);
         }
         Ok(())
     }
