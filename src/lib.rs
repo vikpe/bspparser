@@ -9,7 +9,7 @@ use std::ops::Range;
 
 #[derive(Debug)]
 pub struct BspFile {
-    pub version: Version,
+    pub version: BspVersion,
     pub header: BspHeader,
     pub edge_list: Vec<i32>,
     pub edges: Vec<Edge>,
@@ -29,7 +29,7 @@ impl BspFile {
         let version = {
             let mut bytes = [0; 4];
             r.read_exact(&mut bytes)?;
-            Version::try_from(bytes)?
+            BspVersion::try_from(bytes)?
         };
 
         let h = BspHeader::read(r)?;
@@ -42,12 +42,12 @@ impl BspFile {
 
         // version specific (precision)
         let (faces, edges) = match version {
-            Version::V29 => {
+            BspVersion::V29 => {
                 let faces = read_vec::<FaceV1Reader>(r, &h.faces)?;
                 let edges = read_vec::<EdgeV1Reader>(r, &h.edges)?;
                 (faces, edges)
             }
-            Version::BSP2 => {
+            BspVersion::BSP2 => {
                 let faces = read_vec::<Face>(r, &h.faces)?;
                 let edges = read_vec::<Edge>(r, &h.edges)?;
                 (faces, edges)
@@ -113,27 +113,27 @@ fn parse_entities(bytes: &[u8]) -> Result<Vec<HashMap<String, String>>> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Version {
+pub enum BspVersion {
     V29,
     BSP2,
 }
 
-impl Display for Version {
+impl Display for BspVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Version::V29 => write!(f, "29"),
-            Version::BSP2 => write!(f, "BSP2"),
+            BspVersion::V29 => write!(f, "29"),
+            BspVersion::BSP2 => write!(f, "BSP2"),
         }
     }
 }
 
-impl TryFrom<[u8; 4]> for Version {
+impl TryFrom<[u8; 4]> for BspVersion {
     type Error = Error;
 
     fn try_from(version: [u8; 4]) -> Result<Self, Self::Error> {
         match version {
-            [29, 0, 0, 0] => Ok(Version::V29),
-            [66, 83, 80, 50] => Ok(Version::BSP2),
+            [29, 0, 0, 0] => Ok(BspVersion::V29),
+            [66, 83, 80, 50] => Ok(BspVersion::BSP2),
             _ => Err(e!("Unsupported BSP version")),
         }
     }
