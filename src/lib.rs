@@ -263,7 +263,11 @@ impl FromReader for EdgeV1Reader {
 }
 
 #[derive(Debug, BinRead)]
-pub struct Vertex(#[allow(dead_code)] [f32; 3]);
+pub struct Vertex {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
 
 #[derive(Debug, BinRead)]
 #[br(little)]
