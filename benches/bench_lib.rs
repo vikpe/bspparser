@@ -8,7 +8,7 @@ fn lib_benchmark(c: &mut Criterion) {
     let filesize = fs::metadata(path).unwrap().len();
     let mut g = c.benchmark_group("lib");
     g.throughput(Throughput::Bytes(filesize));
-    g.bench_function("parse", |b| b.iter(|| bspparser::bsp::BspFile::parse(file)));
+    g.bench_function("parse", |b| b.iter(|| bspparser::BspFile::parse(file)));
     g.finish();
 }
 
