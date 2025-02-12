@@ -247,12 +247,12 @@ pub struct Edge {
 
 #[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
-pub struct EdgeV1 {
+struct EdgeV1 {
     pub v0: u16,
     pub v1: u16,
 }
 
-pub struct EdgeV1Reader;
+struct EdgeV1Reader;
 
 impl FromReader for EdgeV1Reader {
     type OutputType = Edge;
@@ -289,7 +289,7 @@ pub struct Coord {
 pub struct TextureInfo {
     pub u: Coord,
     pub v: Coord,
-    pub texture_id: u32,
+    pub texture_index: u32,
     pub flags: u32,
 }
 
@@ -301,6 +301,7 @@ pub struct TextureHeader {
     pub offsets: Vec<i32>,
 }
 
+// https://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm#BL2
 #[derive(Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Texture {
@@ -308,19 +309,13 @@ pub struct Texture {
     pub name: NullString,
     pub width: i32,
     pub height: i32,
-    // pub pictures: [Picture; 4], // todo
+    pub offset1: u32, // Offset to image [width   * height]
+    pub offset2: u32, // Offset to image [width/2 * height/2]
+    pub offset4: u32, // Offset to image [width/4 * height/4]
+    pub offset8: u32, // Offset to image [width/8 * height/8]
 }
 
-/* todo
-#[derive(Debug, Default)]
-pub struct Picture {
-    pub width: u32,
-    pub height: u32,
-    pub data: Vec<u8>,
-}
- */
-
-pub fn parse_textures<R>(r: &mut R, base_offset: u32) -> Result<Vec<Texture>>
+fn parse_textures<R>(r: &mut R, base_offset: u32) -> Result<Vec<Texture>>
 where
     R: Read + Seek,
 {
@@ -335,7 +330,14 @@ where
 
         let abs_offset = base_offset as u64 + rel_offset as u64;
         r.seek(SeekFrom::Start(abs_offset))?;
-        textures.push(Texture::read(r)?);
+        let mut texture = Texture::read(r)?;
+
+        // convert to absolute offsets
+        texture.offset1 += abs_offset as u32;
+        texture.offset2 += abs_offset as u32;
+        texture.offset4 += abs_offset as u32;
+        texture.offset8 += abs_offset as u32;
+        textures.push(texture);
     }
 
     Ok(textures)
@@ -376,6 +378,10 @@ mod tests {
                 name: NullString::from("SandTrim".to_string()),
                 width: 96,
                 height: 32,
+                offset1: 1306132,
+                offset2: 1309204,
+                offset4: 1309972,
+                offset8: 1310164,
             })
         );
 
@@ -417,11 +423,16 @@ mod tests {
                     name: NullString::from("metal4_4".to_string()),
                     width: 64,
                     height: 64,
+                    offset1: 53120,
+                    offset2: 57216,
+                    offset4: 58240,
+                    offset8: 58496,
                 })
             );
         }
         {
-            let bsp = BspFile::parse(&mut fs::File::open("tests/files/dm3_gpl.bsp")?)?;
+            let file = &mut fs::File::open("tests/files/dm3_gpl.bsp")?;
+            let bsp = BspFile::parse(file)?;
             assert_eq!(bsp.entities.len(), 211);
             assert_eq!(bsp.edge_list.len(), 16002);
             assert_eq!(bsp.edges.len(), 8030);
@@ -450,9 +461,14 @@ mod tests {
                     name: NullString::from("tech04_5".to_string()),
                     width: 128,
                     height: 16,
+                    offset1: 506800,
+                    offset2: 508848,
+                    offset4: 509360,
+                    offset8: 509488,
                 })
             );
         }
+
         Ok(())
     }
 }
