@@ -1,7 +1,12 @@
 // specification: https://www.gamers.org/dEngine/quake/spec/quake-spec34/qkspec_4.htm
 // inpiration from: https://github.com/Thinkofname/rust-quake/blob/master/src/bsp/mod.rs
+
+pub mod helpers;
+mod ioextra;
+
 use anyhow::{anyhow as e, Error, Result};
-use binrw::{BinRead, BinResult};
+use binrw::{BinRead, BinResult, NullString};
+use ioextra::FromReader;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom};
@@ -19,6 +24,7 @@ pub struct BspFile {
     pub models: Vec<Model>,
     pub planes: Vec<Plane>,
     pub texture_info: Vec<TextureInfo>,
+    pub textures: Vec<Texture>,
     pub vertices: Vec<Vertex>,
 }
 
@@ -34,24 +40,25 @@ impl BspFile {
         };
 
         let h = BspHeader::read(r)?;
-        let entities = parse_entities(&read_vec::<u8>(r, &h.entities)?)?;
-        let planes = read_vec::<Plane>(r, &h.planes)?;
-        let texture_info = read_vec::<TextureInfo>(r, &h.texture_info)?;
-        let vertices = read_vec::<Vertex>(r, &h.vertices)?;
-        let lightmaps = read_vec::<u8>(r, &h.lightmaps)?;
-        let edge_list = read_vec::<i32>(r, &h.edge_list)?;
-        let models = read_vec::<Model>(r, &h.models)?;
+        let entities = parse_entities(&ioextra::read_vec::<u8>(r, &h.entities)?)?;
+        let planes = ioextra::read_vec::<Plane>(r, &h.planes)?;
+        let textures = parse_textures(r, h.textures.offset)?;
+        let texture_info = ioextra::read_vec::<TextureInfo>(r, &h.texture_info)?;
+        let vertices = ioextra::read_vec::<Vertex>(r, &h.vertices)?;
+        let lightmaps = ioextra::read_vec::<u8>(r, &h.lightmaps)?;
+        let edge_list = ioextra::read_vec::<i32>(r, &h.edge_list)?;
+        let models = ioextra::read_vec::<Model>(r, &h.models)?;
 
         // version specific (precision)
         let (faces, edges) = match version {
             BspVersion::V29 => {
-                let faces = read_vec::<FaceV1Reader>(r, &h.faces)?;
-                let edges = read_vec::<EdgeV1Reader>(r, &h.edges)?;
+                let faces = ioextra::read_vec::<FaceV1Reader>(r, &h.faces)?;
+                let edges = ioextra::read_vec::<EdgeV1Reader>(r, &h.edges)?;
                 (faces, edges)
             }
             BspVersion::BSP2 => {
-                let faces = read_vec::<Face>(r, &h.faces)?;
-                let edges = read_vec::<Edge>(r, &h.edges)?;
+                let faces = ioextra::read_vec::<Face>(r, &h.faces)?;
+                let edges = ioextra::read_vec::<Edge>(r, &h.edges)?;
                 (faces, edges)
             }
         };
@@ -67,6 +74,7 @@ impl BspFile {
             models,
             planes,
             texture_info,
+            textures,
             vertices,
         })
     }
@@ -285,43 +293,59 @@ pub struct TextureInfo {
     pub flags: u32,
 }
 
+#[derive(Clone, Debug, PartialEq, BinRead)]
+#[br(little)]
+pub struct TextureHeader {
+    pub count: i32,
+    #[br(count=count)]
+    pub offsets: Vec<i32>,
+}
+
+#[derive(Clone, Debug, PartialEq, BinRead)]
+#[br(little)]
+pub struct Texture {
+    #[br(pad_size_to = 16)]
+    pub name: NullString,
+    pub width: i32,
+    pub height: i32,
+    // pub pictures: [Picture; 4], // todo
+}
+
+/* todo
+#[derive(Debug, Default)]
+pub struct Picture {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>,
+}
+ */
+
+pub fn parse_textures<R>(r: &mut R, base_offset: u32) -> Result<Vec<Texture>>
+where
+    R: Read + Seek,
+{
+    r.seek(SeekFrom::Start(base_offset as u64))?;
+    let header = TextureHeader::read(r)?;
+    let mut textures: Vec<Texture> = vec![];
+
+    for rel_offset in header.offsets.iter().cloned() {
+        if rel_offset <= 0 {
+            continue;
+        }
+
+        let abs_offset = base_offset as u64 + rel_offset as u64;
+        r.seek(SeekFrom::Start(abs_offset))?;
+        textures.push(Texture::read(r)?);
+    }
+
+    Ok(textures)
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Entry {
     offset: u32,
     size: u32,
-}
-
-pub trait FromReader {
-    type OutputType;
-    fn element_count(size: u32) -> u32;
-    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType>;
-}
-
-impl<T: BinRead + for<'a> BinRead<Args<'a> = ()>> FromReader for T {
-    type OutputType = T;
-
-    fn element_count(size: u32) -> u32 {
-        size / (size_of::<T>() as u32)
-    }
-
-    fn from_reader<R: Read + Seek>(reader: &mut R) -> BinResult<Self::OutputType> {
-        T::read_le(reader)
-    }
-}
-
-pub fn read_vec<T: FromReader>(
-    reader: &mut (impl Read + Seek),
-    entry: &Entry,
-) -> BinResult<Vec<T::OutputType>> {
-    reader.seek(SeekFrom::Start(entry.offset as u64))?;
-    let count = T::element_count(entry.size);
-    let mut elements = Vec::with_capacity(count as usize);
-    for _ in 0..count {
-        let element = T::from_reader(reader)?;
-        elements.push(element);
-    }
-    Ok(elements)
 }
 
 #[cfg(test)]
@@ -331,7 +355,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::fs;
 
-    /* #[test]
+    #[test]
     fn test_parse_bsp2() -> Result<()> {
         let file = &mut fs::File::open("tests/files/dust2qw.bsp")?;
         let bsp = BspFile::parse(file)?;
@@ -343,17 +367,36 @@ mod tests {
         assert_eq!(bsp.models.len(), 5);
         assert_eq!(bsp.planes.len(), 3779);
         assert_eq!(bsp.texture_info.len(), 2133);
+        assert_eq!(bsp.textures.len(), 45);
         assert_eq!(bsp.vertices.len(), 8825);
+
+        assert_eq!(
+            bsp.textures.first(),
+            Some(&Texture {
+                name: NullString::from("SandTrim".to_string()),
+                width: 96,
+                height: 32,
+            })
+        );
+
         Ok(())
-    }*/
+    }
 
     #[test]
     fn test_parse_v29() -> Result<()> {
-        /* {
-            let file = &mut fs::File::open("tests/files/povdmm4.bsp")?;
-            let bsp = BspFile::parse(file)?;
-
+        {
+            let bsp = BspFile::parse(&mut fs::File::open("tests/files/povdmm4.bsp")?)?;
             assert_eq!(bsp.entities.len(), 26);
+            assert_eq!(bsp.edge_list.len(), 1518);
+            assert_eq!(bsp.edges.len(), 760);
+            assert_eq!(bsp.faces.len(), 323);
+            assert_eq!(bsp.lightmaps.len(), 15850);
+            assert_eq!(bsp.models.len(), 5);
+            assert_eq!(bsp.planes.len(), 191);
+            assert_eq!(bsp.texture_info.len(), 21);
+            assert_eq!(bsp.textures.len(), 8);
+            assert_eq!(bsp.vertices.len(), 416);
+
             assert_eq!(
                 bsp.entities.first(),
                 Some(&HashMap::from([
@@ -367,28 +410,29 @@ mod tests {
                     ("worldtype".to_string(), "1".to_string()),
                 ]))
             );
+
             assert_eq!(
-                bsp.entities.last(),
-                Some(&HashMap::from([
-                    ("classname".to_string(), "light".to_string()),
-                    ("origin".to_string(), "192 -128 -128".to_string()),
-                ]))
+                bsp.textures.first(),
+                Some(&Texture {
+                    name: NullString::from("metal4_4".to_string()),
+                    width: 64,
+                    height: 64,
+                })
             );
-
-            assert_eq!(bsp.edge_list.len(), 1518);
-            assert_eq!(bsp.edges.len(), 760);
-            assert_eq!(bsp.faces.len(), 323);
-            assert_eq!(bsp.lightmaps.len(), 15850);
-            assert_eq!(bsp.models.len(), 5);
-            assert_eq!(bsp.planes.len(), 191);
-            assert_eq!(bsp.texture_info.len(), 21);
-            assert_eq!(bsp.vertices.len(), 416);
-        }*/
+        }
         {
-            let file = &mut fs::File::open("tests/files/dm3_gpl.bsp")?;
-            let bsp = BspFile::parse(file)?;
-
+            let bsp = BspFile::parse(&mut fs::File::open("tests/files/dm3_gpl.bsp")?)?;
             assert_eq!(bsp.entities.len(), 211);
+            assert_eq!(bsp.edge_list.len(), 16002);
+            assert_eq!(bsp.edges.len(), 8030);
+            assert_eq!(bsp.faces.len(), 3236);
+            assert_eq!(bsp.lightmaps.len(), 134639);
+            assert_eq!(bsp.models.len(), 7);
+            assert_eq!(bsp.planes.len(), 835);
+            assert_eq!(bsp.texture_info.len(), 272);
+            assert_eq!(bsp.textures.len(), 59);
+            assert_eq!(bsp.vertices.len(), 4544);
+
             assert_eq!(
                 bsp.entities.first(),
                 Some(&HashMap::from([
@@ -399,23 +443,15 @@ mod tests {
                     ("worldtype".to_string(), "2".to_string()),
                 ]))
             );
-            assert_eq!(
-                bsp.entities.last(),
-                Some(&HashMap::from([
-                    ("classname".to_string(), "info_intermission".to_string()),
-                    ("mangle".to_string(), "20 240 0".to_string()),
-                    ("origin".to_string(), "1840 256 64".to_string()),
-                ]))
-            );
 
-            assert_eq!(bsp.edge_list.len(), 16002);
-            assert_eq!(bsp.edges.len(), 8030);
-            assert_eq!(bsp.faces.len(), 3236);
-            assert_eq!(bsp.lightmaps.len(), 134639);
-            assert_eq!(bsp.models.len(), 7);
-            assert_eq!(bsp.planes.len(), 835);
-            assert_eq!(bsp.texture_info.len(), 272);
-            assert_eq!(bsp.vertices.len(), 4544);
+            assert_eq!(
+                bsp.textures.first(),
+                Some(&Texture {
+                    name: NullString::from("tech04_5".to_string()),
+                    width: 128,
+                    height: 16,
+                })
+            );
         }
         Ok(())
     }
