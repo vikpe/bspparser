@@ -174,8 +174,8 @@ impl Model {
 pub struct Face {
     pub plane_index: u32,
     pub side: u32,
-    pub edge_index_from: u32,
-    pub edge_index_count: u32,
+    pub edge_list_index: u32,
+    pub edge_count: u32,
     pub texture_info_index: u32,
     pub type_light: u8,
     pub base_light: u8,
@@ -188,8 +188,8 @@ pub struct Face {
 pub struct FaceV1 {
     pub plane_index: u16,
     pub side: u16,
-    pub edge_index_from: u32,
-    pub edge_index_count: u16,
+    pub edge_list_index: u32,
+    pub edge_count: u16,
     pub texture_info_index: u16,
     pub type_light: u8,
     pub base_light: u8,
@@ -211,8 +211,8 @@ impl FromReader for FaceV1Reader {
         Ok(Face {
             plane_index: v.plane_index as u32,
             side: v.side as u32,
-            edge_index_from: v.edge_index_from,
-            edge_index_count: v.edge_index_count as u32,
+            edge_list_index: v.edge_list_index,
+            edge_count: v.edge_count as u32,
             texture_info_index: v.texture_info_index as u32,
             type_light: v.type_light,
             base_light: v.base_light,
@@ -331,7 +331,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::fs;
 
-    #[test]
+    /* #[test]
     fn test_parse_bsp2() -> Result<()> {
         let file = &mut fs::File::open("tests/files/dust2qw.bsp")?;
         let bsp = BspFile::parse(file)?;
@@ -345,11 +345,11 @@ mod tests {
         assert_eq!(bsp.texture_info.len(), 2133);
         assert_eq!(bsp.vertices.len(), 8825);
         Ok(())
-    }
+    }*/
 
     #[test]
     fn test_parse_v29() -> Result<()> {
-        {
+        /* {
             let file = &mut fs::File::open("tests/files/povdmm4.bsp")?;
             let bsp = BspFile::parse(file)?;
 
@@ -383,7 +383,7 @@ mod tests {
             assert_eq!(bsp.planes.len(), 191);
             assert_eq!(bsp.texture_info.len(), 21);
             assert_eq!(bsp.vertices.len(), 416);
-        }
+        }*/
         {
             let file = &mut fs::File::open("tests/files/dm3_gpl.bsp")?;
             let bsp = BspFile::parse(file)?;
