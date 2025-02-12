@@ -7,7 +7,7 @@ use std::fmt::Display;
 use std::io::{Read, Seek, SeekFrom};
 use std::ops::Range;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BspFile {
     pub version: BspVersion,
     pub header: BspHeader,
@@ -72,7 +72,7 @@ impl BspFile {
     }
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct BspHeader {
     pub entities: Entry,
@@ -115,7 +115,7 @@ fn parse_entities(bytes: &[u8]) -> Result<Vec<HashMap<String, String>>> {
     Ok(entities)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum BspVersion {
     V29,
     BSP2,
@@ -142,14 +142,14 @@ impl TryFrom<[u8; 4]> for BspVersion {
     }
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct BoundingBox {
     pub min: [f32; 3],
     pub max: [f32; 3],
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Model {
     pub bounds: BoundingBox,
@@ -169,7 +169,7 @@ impl Model {
     }
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Face {
     pub plane_index: u32,
@@ -183,7 +183,7 @@ pub struct Face {
     pub lightmap: u32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct FaceV1 {
     pub plane_index: u16,
@@ -222,7 +222,7 @@ impl FromReader for FaceV1Reader {
     }
 }
 
-#[derive(Debug, PartialEq, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Plane {
     pub normal: [f32; 3],
@@ -230,14 +230,14 @@ pub struct Plane {
     pub kind: i32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Edge {
     pub v0: u32,
     pub v1: u32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct EdgeV1 {
     pub v0: u16,
@@ -262,21 +262,21 @@ impl FromReader for EdgeV1Reader {
     }
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 pub struct Vertex {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Coord {
     pub vec: [f32; 3],
     pub offset: f32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct TextureInfo {
     pub u: Coord,
@@ -285,7 +285,7 @@ pub struct TextureInfo {
     pub flags: u32,
 }
 
-#[derive(Debug, BinRead)]
+#[derive(Copy, Clone, Debug, PartialEq, BinRead)]
 #[br(little)]
 pub struct Entry {
     offset: u32,
