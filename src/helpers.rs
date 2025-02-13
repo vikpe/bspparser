@@ -1,12 +1,22 @@
 use crate::ioextra::read_vec;
-use crate::{BspFile, Entry, Face, Texture, Vertex};
-use anyhow::Result;
+use crate::{BspFile, Entry, Face, Texture, TextureInfo, Vertex};
+use anyhow::{anyhow as e, Result};
 use std::io::{Read, Seek};
 
-pub fn get_face_texture(bsp: &BspFile, face: &Face) -> Texture {
-    let info = bsp.texture_info[face.texture_info_index as usize];
-    let texture = &bsp.textures[info.texture_index as usize];
-    texture.clone()
+pub fn get_face_texture(bsp: &BspFile, face: &Face) -> Result<Texture> {
+    let info = get_face_texture_info(bsp, face)?;
+
+    match bsp.textures.get(info.texture_index as usize) {
+        None => Err(e!("Texture index out of bounds")),
+        Some(texture) => Ok(texture.clone()),
+    }
+}
+
+pub fn get_face_texture_info(bsp: &BspFile, face: &Face) -> Result<TextureInfo> {
+    match bsp.texture_info.get(face.texture_info_index as usize) {
+        None => Err(e!("Texture info index out of bounds")),
+        Some(info) => Ok(*info),
+    }
 }
 
 pub fn get_face_vertices(bsp: &BspFile, face: &Face) -> Vec<Vertex> {
